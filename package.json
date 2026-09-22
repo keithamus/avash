@@ -1,0 +1,48 @@
+{
+  "name": "avashjs",
+  "version": "0.0.0-development",
+  "description": "Tiny AV1 image placeholders: a BlurHash replacement with real detail in ~150 bytes",
+  "homepage": "https://github.com/keithamus/avash#readme",
+  "bugs": {
+    "url": "https://github.com/keithamus/avash/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/keithamus/avash.git"
+  },
+  "license": "MIT",
+  "author": "Keith Cirkel (https://keithcirkel.co.uk)",
+  "keywords": [
+    "avash",
+    "blurhash",
+    "thumbhash",
+    "placeholder",
+    "avif",
+    "av1",
+    "lqip"
+  ],
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./js/avash.d.ts",
+      "browser": "./js/avash.min.js",
+      "default": "./js/avash.js"
+    }
+  },
+  "main": "js/avash.js",
+  "unpkg": "js/avash.min.js",
+  "jsdelivr": "js/avash.min.js",
+  "types": "js/avash.d.ts",
+  "files": [
+    "js/avash.js",
+    "js/avash.min.js",
+    "js/avash.d.ts"
+  ],
+  "scripts": {
+    "minify": "esbuild --bundle --minify --format=esm js/avash.js > js/avash.min.js",
+    "prepublishOnly": "npm run minify"
+  },
+  "devDependencies": {
+    "esbuild": "^0.28.2"
+  }
+}

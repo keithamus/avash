@@ -1,0 +1,20 @@
+{
+  "name": "avash",
+  "description": "Tiny AV1 image placeholders: a BlurHash replacement with real detail in ~150 bytes",
+  "version": "0.1.0",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/keithamus/avash"
+  },
+  "files": [
+    "avash_bg.wasm",
+    "avash.js",
+    "avash.d.ts"
+  ],
+  "module": "avash.js",
+  "types": "avash.d.ts",
+  "sideEffects": [
+    "./snippets/*"
+  ]
+}

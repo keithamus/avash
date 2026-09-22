@@ -1,0 +1,40 @@
+[package]
+name = "avash"
+version = "0.1.0"
+edition = "2024"
+description = "Tiny AV1 image placeholders: a BlurHash replacement with real detail in ~150 bytes"
+license = "MIT"
+repository = "https://github.com/keithamus/avash"
+readme = "README.md"
+keywords = ["blurhash", "thumbhash", "placeholder", "avif", "av1"]
+categories = ["multimedia::images", "compression"]
+exclude = ["demo", "exp", "index.html", "js", "package.json", "package-lock.json"]
+
+[package.metadata.docs.rs]
+no-default-features = true
+features = ["rav1e"]
+
+[lib]
+crate-type = ["rlib", "cdylib"]
+
+[dependencies]
+libaom-sys = { version = "0.17", optional = true }
+rav1e = { version = "0.8", default-features = false, optional = true }
+wasm-bindgen = { version = "0.2", optional = true }
+image = { version = "0.25", default-features = false, features = ["png", "jpeg", "webp"], optional = true }
+
+[features]
+default = ["aom", "cli"]
+aom = ["dep:libaom-sys"]
+rav1e = ["dep:rav1e"]
+wasm = ["rav1e", "dep:wasm-bindgen"]
+cli = ["aom", "dep:image"]
+
+[[bin]]
+name = "avash"
+required-features = ["cli"]
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1

@@ -1,0 +1,326 @@
+<!doctype html>
+<meta charset="utf-8" />
+<title>avash encoder</title>
+<style>
+  body {
+    font:
+      15px system-ui,
+      sans-serif;
+    background: #111;
+    color: #ddd;
+    margin: 0;
+    display: grid;
+    place-items: start center;
+    min-height: 100vh;
+  }
+  main {
+    display: grid;
+    gap: 16px;
+    padding: 24px;
+    max-width: 1280px;
+    width: 100%;
+    box-sizing: border-box;
+  }
+  .row {
+    display: flex;
+    gap: 24px;
+    flex-wrap: wrap;
+    align-items: flex-start;
+  }
+  .cards {
+    display: grid;
+    gap: 16px;
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    align-items: start;
+  }
+  .card {
+    display: grid;
+    gap: 6px;
+    min-width: 0;
+  }
+  .card img,
+  .card canvas {
+    display: block;
+    width: 100%;
+    height: auto;
+    border-radius: 6px;
+    background: #222;
+  }
+  label {
+    color: #999;
+    display: flex;
+    gap: 8px;
+    align-items: center;
+  }
+  textarea {
+    width: 100%;
+    box-sizing: border-box;
+    font:
+      12px ui-monospace,
+      monospace;
+    background: #1a1a1a;
+    color: #ddd;
+    border: 1px solid #333;
+    border-radius: 4px;
+    padding: 8px;
+  }
+  button,
+  select {
+    background: #333;
+    color: #ddd;
+    border: 1px solid #555;
+    padding: 6px 12px;
+    border-radius: 4px;
+    cursor: pointer;
+  }
+  a {
+    color: #4af;
+  }
+  code {
+    background: #222;
+    padding: 1px 4px;
+    border-radius: 3px;
+  }
+  #stats {
+    color: #999;
+  }
+</style>
+<main>
+  <h2 style="margin: 0">avash</h2>
+  <p class="hint">
+    A BlurHash replacement, which uses a single 48 px AV1 frame with the
+    container headers stripped. This page can be used to encoding the hash using
+    <a href="">rav1e</a> via wasm, the resulting hash can be reconstructed using
+    a tiny library (<a href="./js/avash.js">avash.js</a>), whith we-wraps the
+    bytes back into an AVIF image for the browser to decode.
+  </p>
+  <p class="hint">
+    Images with similar fidelity as the BlurHash tend to be a few characters
+    smaller, while images taking up the same number of bytes as BlurHash tend to
+    expose more details of the image, making it actually more useful.
+  </p>
+  <div class="row">
+    <label
+      >sample
+      <select id="sample"></select
+    ></label>
+    <label>or upload <input id="file" type="file" accept="image/*" /></label>
+    <label
+      >size <input id="size" type="range" min="12" max="96" value="48" />
+      <span id="sizev">48</span> px</label
+    >
+    <label
+      >quality <input id="q" type="range" min="20" max="63" value="40" />
+      <span id="qv">40</span></label
+    >
+    <label
+      >blurhash <input id="bhc" type="range" min="1" max="9" value="9" />
+      <span id="bhcv">9x6</span></label
+    >
+    <button id="match">match blurhash length</button>
+    <button id="defaults">defaults</button>
+  </div>
+  <div class="cards">
+    <div class="card">
+      <span class="hint">source</span
+      ><canvas id="src" width="384" height="256"></canvas>
+    </div>
+    <div class="card">
+      <span class="hint"
+        >avash, upscaled by the browser <span id="astat"></span></span
+      ><img id="preview" alt="" />
+    </div>
+    <div class="card">
+      <span class="hint">blurhash <span id="bstat"></span></span
+      ><canvas id="bh" width="384" height="256"></canvas>
+    </div>
+  </div>
+  <div id="stats"></div>
+  <textarea id="out" rows="4" readonly placeholder="avash string"></textarea>
+  <div class="row">
+    <button id="copy">copy</button>
+    <button id="simulate">simulate slow load</button>
+    <span class="hint"
+      >Runs the real thing in an iframe: <code>avash.js</code> plus
+      <code>&lt;img avash="…"&gt;</code>, with <code>src</code> arriving 3 s
+      later.</span
+    >
+  </div>
+  <div class="row" id="sim"></div>
+  <pre
+    id="simsrc"
+    class="hint"
+    style="margin: 0; white-space: pre-wrap; word-break: break-all"
+  ></pre>
+</main>
+<script type="module">
+  import init, { encode } from "./js/pkg/avash.js";
+  import { toObjectURL } from "./js/avash.js";
+  import * as blurhash from "./demo/blurhash.js";
+  await init();
+
+  const $ = (s) => document.querySelector(s);
+  const canvas = $("#src"),
+    ctx = canvas.getContext("2d");
+  const bh = $("#bh"),
+    bhctx = bh.getContext("2d");
+  let bitmap, hash, previewUrl;
+
+  function runBlurhash() {
+    if (!bitmap) return;
+    const cx = +$("#bhc").value,
+      cy = Math.max(1, Math.round((cx * canvas.height) / canvas.width));
+    $("#bhcv").textContent = `${cx}x${Math.min(9, cy)}`;
+    const small = new OffscreenCanvas(
+      64,
+      Math.round((64 * canvas.height) / canvas.width),
+    );
+    small.getContext("2d").drawImage(canvas, 0, 0, small.width, small.height);
+    const { data } = small
+      .getContext("2d")
+      .getImageData(0, 0, small.width, small.height);
+    const s = blurhash.encode(
+      data,
+      small.width,
+      small.height,
+      cx,
+      Math.min(9, cy),
+    );
+    bh.width = 96;
+    bh.height = Math.round((96 * canvas.height) / canvas.width);
+    bhctx.putImageData(
+      new ImageData(
+        blurhash.decode(s, bh.width, bh.height),
+        bh.width,
+        bh.height,
+      ),
+      0,
+      0,
+    );
+    $("#bstat").textContent = `(${s.length} chars, ${s.length} bytes)`;
+    return s.length;
+  }
+
+  function setSlider(id, v) {
+    $("#" + id).value = v;
+    $("#" + id + "v").textContent = v;
+  }
+
+  function matchBlurhash() {
+    if (!bitmap) return;
+    const target = runBlurhash();
+    const { data, width, height } = ctx.getImageData(
+      0,
+      0,
+      canvas.width,
+      canvas.height,
+    );
+    const rgba = new Uint8Array(data.buffer);
+    const len = (size, q) => encode(rgba, width, height, size, q).length;
+    for (let size = 48; size >= 12; size -= 4) {
+      if (len(size, 63) > target) continue;
+      let lo = 30,
+        hi = 63;
+      while (lo < hi) {
+        const mid = (lo + hi) >> 1;
+        if (len(size, mid) <= target) hi = mid;
+        else lo = mid + 1;
+      }
+      setSlider("size", size);
+      setSlider("q", lo);
+      return run();
+    }
+  }
+
+  async function load(file) {
+    bitmap = await createImageBitmap(file);
+    const scale = Math.min(1, 1024 / Math.max(bitmap.width, bitmap.height));
+    canvas.width = Math.round(bitmap.width * scale);
+    canvas.height = Math.round(bitmap.height * scale);
+    ctx.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+    run();
+  }
+
+  function run() {
+    if (!bitmap) return;
+    const { data, width, height } = ctx.getImageData(
+      0,
+      0,
+      canvas.width,
+      canvas.height,
+    );
+    const t = performance.now();
+    hash = encode(
+      new Uint8Array(data.buffer),
+      width,
+      height,
+      +$("#size").value,
+      +$("#q").value,
+    );
+    const ms = performance.now() - t;
+    $("#out").value = hash;
+    if (previewUrl) URL.revokeObjectURL(previewUrl);
+    previewUrl = toObjectURL(hash);
+    $("#preview").src = previewUrl;
+    $("#preview").style.aspectRatio = `${width} / ${height}`;
+    const bhLen = runBlurhash();
+    $("#stats").textContent =
+      `${hash.length} chars (~${Math.round((hash.length * Math.log2(88)) / 8)} bytes), encoded in ${ms.toFixed(0)} ms; blurhash tops out at 166 chars, this one is ${bhLen}`;
+    $("#astat").textContent = `(${hash.length} chars)`;
+  }
+
+  $("#file").onchange = (e) => e.target.files[0] && load(e.target.files[0]);
+  $("#sample").onchange = (e) => loadSample(e.target.value);
+  for (const id of ["size", "q"]) {
+    $("#" + id).oninput = (e) => {
+      $("#" + id + "v").textContent = e.target.value;
+      run();
+    };
+  }
+  $("#bhc").oninput = runBlurhash;
+  $("#match").onclick = matchBlurhash;
+  $("#defaults").onclick = () => {
+    setSlider("size", 48);
+    setSlider("q", 40);
+    run();
+  };
+  $("#copy").onclick = () => navigator.clipboard.writeText(hash ?? "");
+  $("#simulate").onclick = () => {
+    if (!hash) return;
+    canvas.toBlob(
+      (b) => {
+        const src = URL.createObjectURL(b);
+        const markup =
+          `<script type="module" src="${new URL("./js/avash.js", location).href}"></` +
+          `script>
+<img avash="${hash}" width="${canvas.width}" height="${canvas.height}" style="width:384px;max-width:100%;height:auto;border-radius:6px" alt="">
+<script>setTimeout(() => document.querySelector("img").src = "${src}", 3000)</` +
+          `script>`;
+        const frame = document.createElement("iframe");
+        frame.srcdoc = `<!doctype html><body style="margin:0;background:#111">${markup}`;
+        frame.style.cssText =
+          "border:0;width:384px;max-width:100%;aspect-ratio:" +
+          canvas.width / canvas.height;
+        $("#sim").replaceChildren(frame);
+        $("#simsrc").textContent = markup
+          .replace(src, "photo.jpg")
+          .replace(hash, hash.slice(0, 24) + "…");
+      },
+      "image/jpeg",
+      0.9,
+    );
+  };
+
+  const samples = Array.from({ length: 24 }, (_, i) =>
+    String(i + 1).padStart(2, "0"),
+  );
+  $("#sample").append(...samples.map((n) => new Option(`kodim${n}`, n)));
+
+  async function loadSample(n) {
+    const r = await fetch(`./demo/kodak/kodim${n}.webp`).catch(() => null);
+    if (r?.ok) load(await r.blob());
+  }
+
+  $("#sample").value = "19";
+  loadSample("19");
+</script>
