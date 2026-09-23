@@ -84,7 +84,7 @@ exports `encode` and `toAvif`), `cli`.
 ## CLI
 
 ```
-avash encode photo.jpg [--size 48] [--quality 40]
+avash encode photo.jpg [--size 48] [--quality 23]
 avash decode <hash> -o out.png [--width 384]
 avash avif <hash> -o out.avif
 avash info <hash>

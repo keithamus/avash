@@ -27,7 +27,7 @@ fn encode_decode_preserves_shape_and_colour() {
 
 #[test]
 fn canonical_mode_stores_no_headers() {
-    let hash = avash::encode(&gradient(256, 256), 256, 256, &avash::Options { size: 48, quality: 50 }).unwrap();
+    let hash = avash::encode(&gradient(256, 256), 256, 256, &avash::Options { size: 48, quality: 13 }).unwrap();
     let av1 = avash::to_av1(&hash).unwrap();
     let frame = av1.len() - 13; // temporal delimiter (2) + sequence header OBU (11)
     let stored = avash::from_base88(&hash).unwrap().len();
@@ -37,7 +37,7 @@ fn canonical_mode_stores_no_headers() {
 
 #[test]
 fn foreign_stream_falls_back_to_verbatim_frame() {
-    let hash = avash::encode(&gradient(128, 128), 128, 128, &avash::Options { size: 32, quality: 50 }).unwrap();
+    let hash = avash::encode(&gradient(128, 128), 128, 128, &avash::Options { size: 32, quality: 13 }).unwrap();
     let mut av1 = avash::to_av1(&hash).unwrap();
     let seq_end = 4 + av1[3] as usize;
     av1[seq_end - 1] ^= 1; // a padding bit: still a valid header, no longer the canonical one
@@ -58,7 +58,7 @@ fn rejects_garbage() {
 
 #[test]
 fn avif_wrapper_is_well_formed() {
-    let hash = avash::encode(&gradient(64, 64), 64, 64, &avash::Options { size: 16, quality: 50 }).unwrap();
+    let hash = avash::encode(&gradient(64, 64), 64, 64, &avash::Options { size: 16, quality: 13 }).unwrap();
     let avif = avash::to_avif(&hash).unwrap();
     assert_eq!(&avif[4..12], b"ftypavif");
     let mdat = avif.windows(4).position(|w| w == b"mdat").unwrap() + 4;
@@ -76,7 +76,7 @@ fn avif_wrapper_is_well_formed() {
 #[cfg(feature = "rav1e")]
 #[test]
 fn rav1e_streams_round_trip_verbatim() {
-    let hash = avash::encode_rav1e(&gradient(256, 256), 256, 256, &avash::Options { size: 48, quality: 50 }).unwrap();
+    let hash = avash::encode_rav1e(&gradient(256, 256), 256, 256, &avash::Options { size: 48, quality: 13 }).unwrap();
     let bytes = avash::from_base88(&hash).unwrap();
     assert_eq!((bytes[0] >> 4) & 3, 2, "rav1e needs its own sequence header");
     let img = avash::decode(&hash).unwrap();
@@ -85,7 +85,7 @@ fn rav1e_streams_round_trip_verbatim() {
 
 #[test]
 fn uncanonical_frame_header_keeps_the_frame_whole() {
-    let hash = avash::encode(&gradient(128, 128), 128, 128, &avash::Options { size: 32, quality: 50 }).unwrap();
+    let hash = avash::encode(&gradient(128, 128), 128, 128, &avash::Options { size: 32, quality: 13 }).unwrap();
     let mut av1 = avash::to_av1(&hash).unwrap();
     let frame = 4 + av1[3] as usize + 2; // temporal delimiter, sequence header OBU, frame OBU header
     av1[frame + 1] ^= 1; // using_qmatrix, bit 15 of the uncompressed frame header

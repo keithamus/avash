@@ -72,13 +72,13 @@ impl std::error::Error for Error {}
 pub struct Options {
     /// Long edge of the encoded frame in pixels, 1..=256. Default 48.
     pub size: u32,
-    /// AV1 constant-quality level, 0 (best) ..= 63. Default 40.
+    /// Encoding quality, 0 (smallest) ..= 63 (best). Default 23.
     pub quality: u8,
 }
 
 impl Default for Options {
     fn default() -> Self {
-        Self { size: 48, quality: 40 }
+        Self { size: 48, quality: 23 }
     }
 }
 
@@ -117,7 +117,7 @@ fn encode_with(rgba: &[u8], width: u32, height: u32, opts: &Options, backend: fn
     let (dw, dh) = (even(dw), even(dh));
     let rgb = color::downsample(rgba, width, height, dw, dh);
     let yuv = color::rgb_to_yuv420(&rgb, dw, dh);
-    let obus = backend(&yuv, opts.quality)?;
+    let obus = backend(&yuv, 63 - opts.quality)?;
     Ok(to_base88(&pack(&obus)?))
 }
 

@@ -16,5 +16,12 @@
   "types": "avash.d.ts",
   "sideEffects": [
     "./snippets/*"
+  ],
+  "keywords": [
+    "blurhash",
+    "thumbhash",
+    "placeholder",
+    "avif",
+    "av1"
   ]
 }
