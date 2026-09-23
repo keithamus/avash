@@ -23,7 +23,7 @@ pub fn encode(img: &Yuv420, cq_level: u8) -> Result<Vec<u8>, Error> {
         low_latency: true,
         min_key_frame_interval: 0,
         max_key_frame_interval: 1,
-        quantizer: (cq_level as usize * 3 + 55).min(255),
+        quantizer: (cq_level as usize * 255 + 31) / 63,
         speed_settings: speed,
         ..Default::default()
     };
