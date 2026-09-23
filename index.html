@@ -1,171 +1,549 @@
 <!doctype html>
 <meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>avash encoder</title>
 <style>
+  :root {
+    --bg: #0e1014;
+    --panel: #15181d;
+    --line: #262a31;
+    --muted: #8a909a;
+    --text: #e4e6ea;
+    --accent: #3b8cff;
+    --ar: 3 / 2;
+    color-scheme: dark;
+  }
   body {
     font:
       15px system-ui,
       sans-serif;
-    background: #111;
-    color: #ddd;
+    background: var(--bg);
+    color: var(--text);
     margin: 0;
-    display: grid;
-    place-items: start center;
-    min-height: 100vh;
+  }
+  header {
+    display: flex;
+    align-items: center;
+    gap: 24px;
+    padding: 20px 24px;
+    border-bottom: 1px solid var(--line);
+  }
+  header h1 {
+    margin: 0;
+    font-size: 32px;
+    line-height: 1;
+    letter-spacing: -0.02em;
+  }
+  body > header > div {
+    display: flex;
+    align-items: baseline;
+    gap: 16px;
+    flex-wrap: wrap;
+  }
+  header p {
+    margin: 0;
+    color: var(--muted);
+  }
+  header nav .hint {
+    font-size: 13px;
+  }
+  header nav {
+    margin-left: auto;
+    display: flex;
+    gap: 24px;
+    align-items: center;
+  }
+  header nav a,
+  header nav button {
+    all: unset;
+    color: var(--muted);
+    cursor: pointer;
+  }
+  header nav a:hover,
+  header nav button:hover {
+    color: var(--text);
+  }
+  header nav :focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 4px;
   }
   main {
     display: grid;
     gap: 16px;
-    padding: 24px;
-    max-width: 1280px;
-    width: 100%;
+    padding: 16px 24px 48px;
+    max-width: 1440px;
+    margin: 0 auto;
     box-sizing: border-box;
   }
-  .row {
+  .panels {
     display: flex;
-    gap: 24px;
     flex-wrap: wrap;
-    align-items: flex-start;
-  }
-  .cards {
-    display: grid;
     gap: 16px;
-    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
-    align-items: start;
+    align-items: stretch;
   }
-  .card {
+  .panels.results {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+  }
+  @media (min-width: 560px) {
+    .panels.results {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+  }
+  @media (min-width: 1060px) {
+    .panels.results {
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+    }
+  }
+  .panel {
+    flex: 1 1 240px;
+    display: grid;
+    gap: 14px 24px;
+    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+    align-content: start;
+    margin: 0;
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 16px 20px 20px;
+    min-width: 0;
+  }
+  .panel.wide {
+    flex: 3 1 520px;
+  }
+  .panel > legend,
+  .panel > .full {
+    float: left;
+    grid-column: 1 / -1;
+  }
+  .panel > legend,
+  .panel h2 {
+    padding: 0;
+    margin: 0;
+    font-size: 17px;
+    font-weight: 600;
+  }
+  .panel > legend + .hint {
+    margin-top: -8px;
+  }
+  .panel.result {
+    flex: 1 1 240px;
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .panel.result > header {
+    all: unset;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+  .panel.result > header > .actions {
+    margin-left: auto;
+  }
+  .results .panel.result > header {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    column-gap: 12px;
+    row-gap: 2px;
+    min-height: 44px;
+    align-content: center;
+  }
+  .results header > button {
+    grid-column: 2;
+    grid-row: 1 / span 2;
+  }
+  .meta {
+    color: var(--muted);
+    font-size: 13px;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+  }
+  .field {
     display: grid;
     gap: 6px;
     min-width: 0;
+    position: relative;
+    grid-template-rows: auto 34px;
   }
-  .card img,
-  .card canvas {
+  .field > * {
+    align-self: center;
+  }
+  .caption {
+    color: var(--muted);
+    font-size: 14px;
+    align-self: end;
+  }
+  .caption > output {
+    color: var(--text);
+    font-weight: 600;
+    margin-left: 4px;
+    font-variant-numeric: tabular-nums;
+  }
+  .actions {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    align-items: center;
+  }
+  .hint {
+    color: var(--muted);
+    font-size: 13px;
+    margin: 0;
+  }
+  .result img,
+  .result canvas {
     display: block;
     width: 100%;
     height: auto;
+    aspect-ratio: var(--ar);
     border-radius: 6px;
-    background: #222;
+    background: #1d2127;
   }
-  label {
-    color: #999;
-    display: flex;
-    gap: 8px;
-    align-items: center;
+  button.copy {
+    margin-left: auto;
+    height: 28px;
+    padding: 0 10px;
+    font-size: 13px;
   }
-  textarea {
-    width: 100%;
-    box-sizing: border-box;
-    font:
-      12px ui-monospace,
-      monospace;
-    background: #1a1a1a;
-    color: #ddd;
-    border: 1px solid #333;
-    border-radius: 4px;
-    padding: 8px;
+  pre.snippet {
+    margin: 0;
+    padding: 10px 12px;
+    background: var(--bg);
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    font-size: 13px;
+    white-space: pre-wrap;
+    word-break: break-all;
   }
   button,
-  select {
-    background: #333;
-    color: #ddd;
-    border: 1px solid #555;
-    padding: 6px 12px;
-    border-radius: 4px;
+  select,
+  .button {
+    background: #1d2127;
+    color: var(--text);
+    border: 1px solid #343a43;
+    padding: 0 14px;
+    height: 36px;
+    border-radius: 6px;
+    font: inherit;
+    font-size: 14px;
     cursor: pointer;
+    min-width: 0;
+    box-sizing: border-box;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+  }
+  button:hover,
+  select:hover,
+  .button:hover {
+    border-color: var(--accent);
+  }
+  button.primary {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: #fff;
+    font-weight: 500;
+  }
+  button.primary:hover {
+    background: #5a9eff;
+  }
+  select {
+    width: 100%;
+  }
+  .button {
+    justify-content: center;
+    width: 100%;
+  }
+  .button span {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  #file {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    opacity: 0;
+    pointer-events: none;
+  }
+  .panel:has(#file:focus-visible) .button {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+  input[type="range"] {
+    appearance: none;
+    width: 100%;
+    height: 34px;
+    margin: 0;
+    background: none;
+    cursor: ew-resize;
+  }
+  input[type="range"]::-moz-range-track {
+    height: 4px;
+    border-radius: 2px;
+    background: #2e333b;
+  }
+  input[type="range"]::-moz-range-progress {
+    height: 4px;
+    border-radius: 2px;
+    background: var(--accent);
+  }
+  input[type="range"]::-moz-range-thumb {
+    width: 16px;
+    height: 16px;
+    border: 0;
+    border-radius: 50%;
+    background: #f2f3f5;
+  }
+  input[type="range"]::-webkit-slider-runnable-track {
+    height: 4px;
+    border-radius: 2px;
+    background: #2e333b;
+  }
+  input[type="range"]::-webkit-slider-thumb {
+    appearance: none;
+    width: 16px;
+    height: 16px;
+    margin-top: -6px;
+    border-radius: 50%;
+    background: #f2f3f5;
+  }
+  input[type="range"]:hover::-moz-range-thumb {
+    box-shadow: 0 0 0 5px #3b8cff44;
+  }
+  input[type="range"]:hover::-webkit-slider-thumb {
+    box-shadow: 0 0 0 5px #3b8cff44;
+  }
+  :focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
   }
   a {
-    color: #4af;
+    color: var(--accent);
   }
   code {
-    background: #222;
+    background: #1d2127;
     padding: 1px 4px;
     border-radius: 3px;
   }
-  #stats {
-    color: #999;
+  #about {
+    max-width: min(80ch, calc(100vw - 48px));
+    max-height: calc(100vh - 48px);
+    box-sizing: border-box;
+    padding: 20px 24px 12px;
+    background: var(--panel);
+    color: var(--text);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    box-shadow: 0 24px 64px #0008;
+  }
+  #about::backdrop {
+    background: #0009;
+    backdrop-filter: blur(4px);
+  }
+  #about > header {
+    all: unset;
+    display: flex;
+    align-items: center;
+    margin-bottom: 12px;
+  }
+  #about h2 {
+    margin: 0;
+    font-size: 17px;
+  }
+  #about > header button {
+    margin-left: auto;
+  }
+  #about p {
+    margin: 0 0 12px;
+    line-height: 1.55;
   }
 </style>
+<header>
+  <div>
+    <h1>avash</h1>
+    <p>Compact image placeholders, powered by AVIF</p>
+  </div>
+  <nav>
+    <button commandfor="about" command="show-modal">About</button>
+    <a href="https://github.com/keithamus/avash" aria-hidden="true" tabindex="-1"
+      ><svg width="24" height="24" viewBox="0 0 16 16" fill="currentColor">
+        <path
+          d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"
+        /></svg
+    ></a>
+  </nav>
+</header>
 <main>
-  <h2 style="margin: 0">avash</h2>
-  <p class="hint">
-    A BlurHash replacement, which uses a single 48 px AV1 frame with the
-    container headers stripped. This page can be used to encoding the hash using
-    <a href="">rav1e</a> via wasm, the resulting hash can be reconstructed using
-    a tiny library (<a href="./js/avash.js">avash.js</a>), whith we-wraps the
-    bytes back into an AVIF image for the browser to decode.
-  </p>
-  <p class="hint">
-    Images with similar fidelity as the BlurHash tend to be a few characters
-    smaller, while images taking up the same number of bytes as BlurHash tend to
-    expose more details of the image, making it actually more useful.
-  </p>
-  <div class="row">
-    <label
-      >sample
-      <select id="sample"></select
-    ></label>
-    <label>or upload <input id="file" type="file" accept="image/*" /></label>
-    <label
-      >size <input id="size" type="range" min="12" max="96" value="48" />
-      <span id="sizev">48</span> px</label
-    >
-    <label
-      >quality <input id="q" type="range" min="0" max="43" value="23" />
-      <span id="qv">23</span></label
-    >
-    <label
-      >blur
-      <select id="blur">
-        <option value="0">none</option>
-        <option value="1">light</option>
-        <option value="2" selected>medium</option>
-        <option value="3">strong</option>
-      </select></label
-    >
-    <label
-      >blurhash <input id="bhc" type="range" min="1" max="9" value="9" />
-      <span id="bhcv">9x6</span></label
-    >
-    <button id="match">match blurhash length</button>
-    <button id="defaults">defaults</button>
+  <div class="panels">
+    <fieldset class="panel">
+      <legend>Image</legend>
+      <p class="hint full">Choose a sample image or upload your own.</p>
+      <div class="field full" style="grid-template-rows: 34px">
+        <select id="sample" aria-label="Sample image"></select>
+      </div>
+      <div class="full" style="display: grid; gap: 6px">
+        <label class="button" for="file"
+          ><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+            <path d="M8 11V2M4.5 5.5 8 2l3.5 3.5M2.5 10v3.5h11V10" /></svg
+          ><span id="filename">Upload image</span></label
+        >
+        <input id="file" type="file" accept="image/*" />
+        <p class="hint">Processed locally; nothing is uploaded.</p>
+      </div>
+    </fieldset>
+    <fieldset class="panel wide">
+      <legend>Avash</legend>
+      <p class="hint full">
+        A single 48 px AV1 frame. Smaller hashes with better visual quality
+        than BlurHash.
+      </p>
+      <div class="field">
+        <label class="caption" for="size"
+          >Size <output id="sizev" for="size">48</output> px</label
+        >
+        <input id="size" type="range" min="12" max="96" value="48" />
+      </div>
+      <div class="field">
+        <label class="caption" for="q"
+          >Quality <output id="qv" for="q">23</output></label
+        >
+        <input id="q" type="range" min="0" max="43" value="23" />
+      </div>
+      <div class="field">
+        <label class="caption" for="blur"
+          >Blur <output id="blurv" for="blur">Medium</output></label
+        >
+        <input id="blur" type="range" min="0" max="3" step="1" value="2" />
+      </div>
+      <div class="full" style="display: grid; gap: 8px">
+        <div class="actions">
+          <button class="primary" id="match" aria-describedby="matchhint">
+            Match BlurHash length
+          </button>
+          <button id="defaults">Reset Avash</button>
+        </div>
+        <p class="hint" id="matchhint">
+          Picks the best size and quality that fit within the BlurHash string
+          length.
+        </p>
+      </div>
+    </fieldset>
+    <fieldset class="panel">
+      <legend>BlurHash</legend>
+      <p class="hint full">Independent encoder for comparison.</p>
+      <div class="field">
+        <label class="caption" for="bhc"
+          >Components <output id="bhcv" for="bhc">9x6</output></label
+        >
+        <input id="bhc" type="range" min="1" max="9" value="9" />
+      </div>
+      <p class="hint full">
+        Larger counts can improve quality but increase hash length.
+      </p>
+    </fieldset>
   </div>
-  <div class="cards">
-    <div class="card">
-      <span class="hint">source</span
-      ><canvas id="src" width="384" height="256"></canvas>
-    </div>
-    <div class="card">
-      <span class="hint"
-        >avash, upscaled by the browser <span id="astat"></span></span
-      ><img id="preview" alt="" />
-    </div>
-    <div class="card">
-      <span class="hint">blurhash <span id="bstat"></span></span
-      ><canvas id="bh" width="384" height="256"></canvas>
-    </div>
+  <div class="panels results">
+    <section class="panel result">
+      <header><h2>Source</h2></header>
+      <canvas id="src" width="384" height="256"></canvas>
+    </section>
+    <section class="panel result">
+      <header>
+        <h2>Avash</h2>
+        <span class="meta" id="astat"></span>
+        <button class="copy primary" data-copy="avash">Copy Hash</button>
+      </header>
+      <img id="preview" alt="Avash placeholder" />
+    </section>
+    <section class="panel result">
+      <header>
+        <h2>BlurHash</h2>
+        <span class="meta" id="bstat"></span>
+        <button class="copy primary" data-copy="blurhash">Copy Hash</button>
+      </header>
+      <canvas id="bh" width="384" height="256"></canvas>
+    </section>
+    <section class="panel result">
+      <header>
+        <h2>ThumbHash</h2>
+        <span class="meta" id="tstat"></span>
+        <button class="copy primary" data-copy="thumbhash">Copy Hash</button>
+      </header>
+      <canvas id="th" width="384" height="256"></canvas>
+    </section>
   </div>
-  <div id="stats"></div>
-  <textarea id="out" rows="4" readonly placeholder="avash string"></textarea>
-  <div class="row">
-    <button id="copy">copy</button>
-    <button id="simulate">simulate slow load</button>
-    <span class="hint"
-      >Runs the real thing in an iframe: <code>avash.js</code> plus
-      <code>&lt;img avash="…"&gt;</code>, with <code>src</code> arriving 3 s
-      later.</span
-    >
-  </div>
-  <div class="row" id="sim"></div>
-  <pre
-    id="simsrc"
-    class="hint"
-    style="margin: 0; white-space: pre-wrap; word-break: break-all"
-  ></pre>
+  <section class="panel result">
+    <header>
+      <div>
+        <h2>Use it on your site</h2>
+        <p class="hint">
+          Load <a href="./js/avash.js">avash.js</a> (1kb gz), add the hash to
+          an <code>&lt;img&gt;</code>, and the real image loads as usual.
+        </p>
+      </div>
+      <div class="actions">
+        <button id="copysnippet">Copy snippet</button>
+        <button id="simulate">Simulate slow load</button>
+      </div>
+    </header>
+    <pre class="snippet" id="snippet"></pre>
+    <div id="sim"></div>
+  </section>
+  <dialog id="about" closedby="any" aria-labelledby="abouttitle">
+    <header>
+      <h2 id="abouttitle">About</h2>
+      <button commandfor="about" command="close">Close</button>
+    </header>
+    <p>
+      A <a href="https://blurha.sh/">BlurHash</a>/
+      <a href="https://github.com/evanw/thumbhash">ThumbHash</a> replacement,
+      which uses a single 48 px AV1 frame with the container headers stripped.
+      Include the <a href="./js/avash.js">avash.js</a> library on your page (1kb
+      gz) and it will look for any images with the `avash` attribute
+      (<code>&lt;img avash="..." src="..."></code>) and the content of the
+      attribute will be rendered as an AVIF background image, displaying before
+      the browser has downloaded the `src` image.
+    </p>
+    <p>
+      To create an avash hash, pick a sample or upload an image and copy the
+      hash (it uses <a href="https://github.com/xiph/rav1e">rav1e</a> via
+      wasm). Tweak the sliders and the hash will change, as will the image
+      output, letting you find the right balance for your image.
+    </p>
+    <p>
+      <a href="https://blurha.sh/">BlurHash</a> images at the smallest number of
+      components will be smaller than Avash, but a BlurHash at <code>5x8</code>
+      will likely be less clear than the Avash at the same length (click "Match
+      BlurHash length" to find encoding settings for Avash to match BlurHash
+      length). Avash has slight quantization artefacts compared to BlurHash, but
+      Blurhash smears colours. Compare <code>kodim09</code> or
+      <code>kodim16</code> to see this smearing effect. BlurHash requires a
+      2.5kb library to decode images.
+    </p>
+    <p>
+      <a href="https://github.com/evanw/thumbhash">ThumbHash</a> is often far
+      smaller (typically 28 characters), which is very compact. Avash will
+      always be bigger, even at the worst quality. ThumbHash images are
+      unrecognisable and so mostly help reduce the visually jarring effect of
+      having images pop in, but offer no real hint to the user about
+      <em>what</em> the image might be when fully downloaded. Compare `kodim04`
+      - an image of a person, to see that a ThumbHash is not recognisably a
+      person, while Avash at 160 chars is. ThumbHash requires a
+      <code>4.15kb</code> library to decode, meaning around 20 images (at
+      default Avash settings, or around 30 at 160 chars) would need to be on a
+      page for it to pay for itself compared to Avash.
+    </p>
+  </dialog>
 </main>
 <script type="module">
   import init, { encode } from "./js/pkg/avash.js";
   import { toObjectURL } from "./js/avash.js";
-  import * as blurhash from "./demo/blurhash.js";
+  import { encode as encodeBlurhash } from "https://unpkg.com/blurhash@2.0.5/dist/esm/index.js";
+  import { decodeBlurHash } from "https://unpkg.com/fast-blurhash@1.2.0/index.js";
+  import {
+    rgbaToThumbHash,
+    thumbHashToRGBA,
+  } from "https://unpkg.com/thumbhash@0.1.1/thumbhash.js";
   await init();
 
   const $ = (s) => document.querySelector(s);
@@ -173,46 +551,72 @@
     ctx = canvas.getContext("2d");
   const bh = $("#bh"),
     bhctx = bh.getContext("2d");
+  const th = $("#th"),
+    thctx = th.getContext("2d");
   let bitmap, hash, previewUrl;
+  const hashes = {};
+
+  function downscale(max) {
+    const scale = max / Math.max(canvas.width, canvas.height);
+    const small = new OffscreenCanvas(
+      Math.max(1, Math.round(canvas.width * scale)),
+      Math.max(1, Math.round(canvas.height * scale)),
+    );
+    small.getContext("2d").drawImage(canvas, 0, 0, small.width, small.height);
+    return small.getContext("2d").getImageData(0, 0, small.width, small.height);
+  }
+
+  function runThumbhash() {
+    if (!bitmap) return;
+    const { data, width, height } = downscale(100);
+    const bytes = rgbaToThumbHash(width, height, data);
+    const out = thumbHashToRGBA(bytes);
+    th.width = out.w;
+    th.height = out.h;
+    thctx.putImageData(
+      new ImageData(new Uint8ClampedArray(out.rgba.buffer), out.w, out.h),
+      0,
+      0,
+    );
+    const b64 = btoa(String.fromCharCode(...bytes));
+    hashes.thumbhash = b64;
+    $("#tstat").textContent = `${b64.length} chars`;
+  }
 
   function runBlurhash() {
     if (!bitmap) return;
     const cx = +$("#bhc").value,
-      cy = Math.max(1, Math.round((cx * canvas.height) / canvas.width));
-    $("#bhcv").textContent = `${cx}x${Math.min(9, cy)}`;
-    const small = new OffscreenCanvas(
-      64,
-      Math.round((64 * canvas.height) / canvas.width),
-    );
-    small.getContext("2d").drawImage(canvas, 0, 0, small.width, small.height);
-    const { data } = small
-      .getContext("2d")
-      .getImageData(0, 0, small.width, small.height);
-    const s = blurhash.encode(
-      data,
-      small.width,
-      small.height,
-      cx,
-      Math.min(9, cy),
-    );
+      cy = Math.min(
+        9,
+        Math.max(1, Math.round((cx * canvas.height) / canvas.width)),
+      );
+    $("#bhcv").textContent = `${cx}x${cy}`;
+    const { data, width, height } = downscale(64);
+    const s = encodeBlurhash(data, width, height, cx, cy);
     bh.width = 96;
     bh.height = Math.round((96 * canvas.height) / canvas.width);
     bhctx.putImageData(
       new ImageData(
-        blurhash.decode(s, bh.width, bh.height),
+        decodeBlurHash(s, bh.width, bh.height),
         bh.width,
         bh.height,
       ),
       0,
       0,
     );
-    $("#bstat").textContent = `(${s.length} chars, ${s.length} bytes)`;
+    hashes.blurhash = s;
+    $("#bstat").textContent = `${s.length} chars`;
     return s.length;
   }
 
   function setSlider(id, v) {
     $("#" + id).value = v;
     $("#" + id + "v").textContent = v;
+  }
+
+  const BLUR = ["None", "Light", "Medium", "Strong"];
+  function setBlurLabel() {
+    $("#blurv").textContent = BLUR[+$("#blur").value];
   }
 
   function matchBlurhash() {
@@ -241,6 +645,9 @@
       setSlider("q", lo);
       return run();
     }
+    setSlider("size", $("#size").min);
+    setSlider("q", $("#q").min);
+    run();
   }
 
   async function load(file) {
@@ -260,7 +667,6 @@
       canvas.width,
       canvas.height,
     );
-    const t = performance.now();
     hash = encode(
       new Uint8Array(data.buffer),
       width,
@@ -269,36 +675,73 @@
       +$("#q").value,
       +$("#blur").value,
     );
-    const ms = performance.now() - t;
-    $("#out").value = hash;
+    hashes.avash = hash;
+    $("#snippet").textContent = snippet(hash.slice(0, 24) + "…");
     if (previewUrl) URL.revokeObjectURL(previewUrl);
     previewUrl = toObjectURL(hash);
     $("#preview").src = previewUrl;
-    $("#preview").style.aspectRatio = `${width} / ${height}`;
-    const bhLen = runBlurhash();
-    $("#stats").textContent =
-      `${hash.length} chars (~${Math.round((hash.length * Math.log2(88)) / 8)} bytes), encoded in ${ms.toFixed(0)} ms; blurhash tops out at 166 chars, this one is ${bhLen}`;
-    $("#astat").textContent = `(${hash.length} chars)`;
+    document.documentElement.style.setProperty("--ar", `${width} / ${height}`);
+    runBlurhash();
+    runThumbhash();
+    $("#astat").textContent = `${hash.length} chars`;
   }
 
-  $("#file").onchange = (e) => e.target.files[0] && load(e.target.files[0]);
-  $("#sample").onchange = (e) => loadSample(e.target.value);
+  $("#file").onchange = (e) => {
+    const f = e.target.files[0];
+    if (!f) return;
+    $("#filename").textContent = f.name;
+    load(f);
+  };
+  $("#sample").onchange = (e) => {
+    $("#filename").textContent = "Upload image";
+    loadSample(e.target.value);
+  };
   for (const id of ["size", "q"]) {
     $("#" + id).oninput = (e) => {
       $("#" + id + "v").textContent = e.target.value;
       run();
     };
   }
-  $("#blur").onchange = run;
+  $("#blur").oninput = () => {
+    setBlurLabel();
+    run();
+  };
   $("#bhc").oninput = runBlurhash;
   $("#match").onclick = matchBlurhash;
   $("#defaults").onclick = () => {
     setSlider("size", 48);
     setSlider("q", 23);
     $("#blur").value = "2";
+    setBlurLabel();
     run();
   };
-  $("#copy").onclick = () => navigator.clipboard.writeText(hash ?? "");
+  const snippet = (h) =>
+    `<script type="module" src="https://unpkg.com/avashjs"></` +
+    `script>\n<img avash="${h}" src="photo.jpg" alt="">`;
+  async function copy(button, text) {
+    if (!text) return;
+    try {
+      await navigator.clipboard.writeText(text);
+    } catch {
+      const t = document.createElement("textarea");
+      t.value = text;
+      t.style.cssText = "position:fixed;opacity:0";
+      document.body.append(t);
+      t.select();
+      const ok = document.execCommand("copy");
+      t.remove();
+      if (!ok) return;
+    }
+    const label = button.dataset.label ??= button.textContent;
+    button.textContent = "Copied!";
+    clearTimeout(button.timer);
+    button.timer = setTimeout(() => (button.textContent = label), 1000);
+  }
+  for (const b of document.querySelectorAll("[data-copy]")) {
+    b.onclick = () => copy(b, hashes[b.dataset.copy]);
+  }
+  $("#copysnippet").onclick = (e) =>
+    copy(e.currentTarget, hash && snippet(hash));
   $("#simulate").onclick = () => {
     if (!hash) return;
     canvas.toBlob(
@@ -316,9 +759,6 @@
           "border:0;width:384px;max-width:100%;aspect-ratio:" +
           canvas.width / canvas.height;
         $("#sim").replaceChildren(frame);
-        $("#simsrc").textContent = markup
-          .replace(src, "photo.jpg")
-          .replace(hash, hash.slice(0, 24) + "…");
       },
       "image/jpeg",
       0.9,
