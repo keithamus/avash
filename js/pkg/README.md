@@ -22,41 +22,30 @@ The bytes are a bitstream, big-endian:
 ```
 2  version = 1
 2  mode
-mode 0, canonical: both headers regenerated, only tile data stored
-  6  width / 2 - 1          (even, 2..=128)
-  6  height / 2 - 1
-  6  quantiser index / 4    (63 means 255)
-  1  tx_mode_select
-  1  loop filter present
-  6  loop filter level      (only if present)
-  .. pad to a byte, then the tile group bytes verbatim
-mode 1, canonical sequence header, frame stored whole (odd or large frames)
-  4  padding, 8 width - 1, 8 height - 1, then the OBU_FRAME payload
+mode 1, canonical sequence header regenerated, frame stored whole
+  1  loop restoration enabled
+  3  padding, 8 width - 1, 8 height - 1, then the OBU_FRAME payload
 mode 2, foreign encoder: sequence header stored too
   4  padding, 8 sequence header length, the header, then the OBU_FRAME payload
 ```
 
-Mode 0 keeps a three byte prefix (four when the frame keeps deblocking) where a
-raw stream carries a 9 byte sequence header and a 5 to 7 byte frame header.
-Stripping the frame header alone takes 6 to 7 bytes off every hash: 45% of a
-16px placeholder, 30% of a 24 px one, 12% at 48 px and 5% at 64 px. The
-regenerated sequence header is profile 0, reduced still picture, 128x128
-superblocks, filter-intra and intra-edge on, superres/CDEF/restoration off,
-8-bit 4:2:0, sRGB/BT.601 full range; the regenerated frame header is a key frame
-with one tile, no screen-content tools, no segmentation and no delta quantisers.
-The four loop filter levels collapse to one value, which is why the
-reconstruction is not bit-identical to the encoder's own stream (mean SSIM
-difference over Kodak 24: 0.0003).
+Mode 1 keeps a three byte prefix where a raw stream carries an 8 to 10 byte
+sequence header, so it saves 6 to 8 bytes per hash. The regenerated header is
+the one rav1e emits: profile 0, reduced still picture, level 31, 64x64
+superblocks, intra-edge filter on, filter-intra/superres/CDEF off, loop
+restoration when a blur is applied, 8-bit 4:2:0, sRGB/BT.601 full range,
+separate UV delta q. The frame header (11 to 12 bytes) is stored verbatim:
+rav1e derives its chroma delta quantisers from tables that a decoder side would
+have to carry to regenerate it.
 
 The bytes are written as one big-endian integer in base 88 over printable ASCII
 minus space, `"`, `&`, `'`, `<`, `>` and `\`, so the string drops into HTML
 attributes and JSON unescaped at 6.46 bits per character (base64 is 6,
 BlurHash's base83 is 6.38; the largest attribute-safe ASCII alphabet would only
 buy another 0.5%). Any AV1 encoder producing a reduced still-picture header and
-a single frame OBU can emit an avash (`avash::pack` takes a raw OBU stream).
-The bundled encoder is rav1e; it signals 64x64 superblocks, no filter-intra and
-a separate UV delta q, none of which the canonical headers express yet, so its
-strings currently take mode 2 and run about 11 characters longer than mode 0.
+a single frame OBU can emit an avash (`avash::pack` takes a raw OBU stream);
+a sequence header other than rav1e's is stored whole (mode 2), about 10
+characters longer.
 Decoding rebuilds the OBU stream or a minimal AVIF; browsers decode the AVIF
 natively.
 
@@ -100,7 +89,7 @@ npm install avashjs
 ```html
 <script type="module" src="https://unpkg.com/avashjs"></script>
 <img
-  avash="#/BXnHmUmisJm0-cON6z#@7ewu]gV|naU9FTdh8gG(8l|2?6O,xyX9|4zo_*mA%u!:h?PtIkd3(]ty!kc{S]$F4MwV"
+  avash="Tfw{%6Y_]t:y9cP:EKP]{(,=n%TL6Fl%qkUuzWfq)Oqjp8|69[vJCLsVS99yAfjUfA%v5zFOvES,Hn!!3bi[Ov9b;$_I{x}F54X-b`BQ1=rQD,wg,$)Cf`hZa%ZIW+N!==?gZ-YlS4Ld3v(f)@^YVq4"
   src="photo.avif"
   width="1200"
   height="800"
@@ -108,10 +97,11 @@ npm install avashjs
 />
 ```
 
-`js/avash.js` (no dependencies, no wasm, 2.4 kB minified / 1.4 kB gzipped)
-paints the placeholder as the image's background until `load`, and watches for
-`img[avash]` added later. Importing the package does the same, and also exports
-`toAvif(hash)`, `toObjectURL(hash)`, `decode(hash)` and `dimensions(hash)`.
+`js/avash.js` (no dependencies, no wasm, 1.9 kB minified / 1.1 kB gzipped /
+1.0 kB brotli) paints the placeholder as the image's background until `load`
+(a failed load keeps it), and watches for `img[avash]` added later. Importing
+the package does the same, and also exports `toAvif(hash)`, `toObjectURL(hash)`,
+`decode(hash)` and `dimensions(hash)`.
 Browser-side encoding uses the wasm build in `js/pkg` (`wasm-pack build --target
 web --no-default-features --features wasm`, not published to npm); see
 `index.html`.

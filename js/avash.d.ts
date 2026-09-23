@@ -10,7 +10,7 @@ export declare function toObjectURL(hash: string): string;
 /** Decode to an ImageBitmap at native (tiny) size. */
 export declare function decode(hash: string): Promise<ImageBitmap>;
 
-/** Show the avash as a placeholder behind an `<img avash="...">` until its real source loads. */
+/** Show the avash as a placeholder behind an `<img avash="...">` until its real source loads. A failed load keeps it. */
 export declare function apply(img: HTMLImageElement): void;
 
 /** Apply to every `img[avash]` under root and keep watching for new ones. */

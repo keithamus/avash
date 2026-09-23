@@ -8,16 +8,9 @@
 //! ```text
 //! 2  version = 1
 //! 2  mode
-//! mode 0, canonical: sequence header and frame header both regenerated
-//!   6  width / 2 - 1            (even, 2..=128)
-//!   6  height / 2 - 1
-//!   6  quantiser index / 4      (63 means 255)
-//!   1  tx_mode_select
-//!   1  loop filter present
-//!   6  loop filter level        (if present)
-//!   .. pad to a byte, then the tile group bytes verbatim
-//! mode 1, canonical sequence header, frame stored whole (odd or large frames):
-//!   4  padding
+//! mode 1, canonical sequence header regenerated, frame stored whole:
+//!   1  loop restoration enabled
+//!   3  padding
 //!   8  width - 1
 //!   8  height - 1
 //!   .. OBU_FRAME payload verbatim
@@ -27,10 +20,11 @@
 //!   .. OBU_SEQUENCE_HEADER payload, then the OBU_FRAME payload verbatim
 //! ```
 //!
-//! The regenerated headers are [`bits::canonical_sequence_header`] and
-//! [`bits::canonical_frame_header`]; together they are 6 to 7 bytes that mode 0
-//! never stores. [`to_av1`] and [`to_avif`] rebuild a stream stock decoders
-//! accept.
+//! The regenerated header is [`bits::canonical_sequence_header`], the one rav1e
+//! emits; mode 1 saves its 8 to 10 bytes plus the length byte. The frame header
+//! is not regenerated: rav1e's chroma delta quantisers come from tables a decoder
+//! side would have to carry. [`to_av1`] and [`to_avif`] rebuild a stream stock
+//! decoders accept.
 
 pub mod bits;
 mod color;
@@ -38,12 +32,10 @@ mod color;
 mod dav1d_backend;
 mod rav1e_backend;
 
-use bits::FrameHeader;
 use std::fmt;
 
 pub const VERSION: u8 = 1;
 
-const MODE_CANONICAL: u8 = 0;
 const MODE_CANONICAL_SEQ: u8 = 1;
 const MODE_EXPLICIT_SEQ: u8 = 2;
 
@@ -186,20 +178,10 @@ fn split(bytes: &[u8]) -> Result<Parts, Error> {
         return Err(Error::Malformed("unsupported version"));
     }
     let (seq, frame) = match (bytes[0] >> 4) & 3 {
-        MODE_CANONICAL => {
-            let mut r = bits::BitReader::new(bytes);
-            r.get(4)?;
-            let (w, h) = ((r.get(6)? + 1) * 2, (r.get(6)? + 1) * 2);
-            let q = r.get(6)?;
-            let header = FrameHeader {
-                base_q_idx: if q == 63 { 255 } else { (q * 4) as u8 },
-                tx_mode_select: r.get(1)? == 1,
-                loop_filter_level: if r.get(1)? == 1 { r.get(6)? as u8 } else { 0 },
-            };
-            let tile = bytes.get(r.pos().div_ceil(8)..).unwrap_or_default();
-            (bits::canonical_sequence_header(w, h), [bits::canonical_frame_header(header), tile.to_vec()].concat())
+        MODE_CANONICAL_SEQ => {
+            let restoration = (bytes[0] >> 3) & 1 == 1;
+            (bits::canonical_sequence_header(bytes[1] as u32 + 1, bytes[2] as u32 + 1, restoration), bytes[3..].to_vec())
         }
-        MODE_CANONICAL_SEQ => (bits::canonical_sequence_header(bytes[1] as u32 + 1, bytes[2] as u32 + 1), bytes[3..].to_vec()),
         MODE_EXPLICIT_SEQ => {
             let n = bytes[1] as usize;
             let seq = bytes.get(2..2 + n).ok_or(Error::Malformed("truncated sequence header"))?;
@@ -211,34 +193,6 @@ fn split(bytes: &[u8]) -> Result<Parts, Error> {
         return Err(Error::Malformed("missing frame"));
     }
     Ok(Parts { seq, frame })
-}
-
-fn canonical_bytes(w: u32, h: u32, header: FrameHeader, tile: &[u8]) -> Option<Vec<u8>> {
-    if w % 2 != 0 || h % 2 != 0 || !(2..=128).contains(&w) || !(2..=128).contains(&h) {
-        return None;
-    }
-    let q = match header.base_q_idx {
-        255 => 63,
-        q if q % 4 == 0 => q as u32 / 4,
-        _ => return None,
-    };
-    if header.loop_filter_level >= 64 {
-        return None;
-    }
-    let mut w2 = bits::BitWriter::new();
-    w2.put(2, VERSION as u32);
-    w2.put(2, MODE_CANONICAL as u32);
-    w2.put(6, w / 2 - 1);
-    w2.put(6, h / 2 - 1);
-    w2.put(6, q);
-    w2.put(1, header.tx_mode_select as u32);
-    if header.loop_filter_level == 0 {
-        w2.put(1, 0);
-    } else {
-        w2.put(1, 1);
-        w2.put(6, header.loop_filter_level as u32);
-    }
-    Some([w2.finish(), tile.to_vec()].concat())
 }
 
 /// Packs a raw OBU stream (from any conforming encoder) into avash bytes.
@@ -259,21 +213,17 @@ pub fn pack(obus: &[u8]) -> Result<Vec<u8>, Error> {
         return Err(Error::Codec("sequence header too long".into()));
     }
     let (w, h) = bits::sequence_header_dimensions(seq)?;
-    if seq != bits::canonical_sequence_header(w, h) {
-        let mut out = vec![(VERSION << 6) | (MODE_EXPLICIT_SEQ << 4), seq.len() as u8];
-        out.extend_from_slice(seq);
-        out.extend_from_slice(frame);
-        return Ok(out);
-    }
-    if let Some((header, len)) = bits::parse_frame_header(frame, w, h)
-        && let Some(out) = canonical_bytes(w, h, header, &frame[len..])
-    {
-        return Ok(out);
-    }
-    if w > 256 || h > 256 {
-        return Err(Error::Codec("frame too large".into()));
-    }
-    let mut out = vec![(VERSION << 6) | (MODE_CANONICAL_SEQ << 4), (w - 1) as u8, (h - 1) as u8];
+    let canonical = [false, true].into_iter().find(|&r| seq == bits::canonical_sequence_header(w, h, r));
+    let mut out = match canonical {
+        Some(restoration) if w <= 256 && h <= 256 => {
+            vec![(VERSION << 6) | (MODE_CANONICAL_SEQ << 4) | ((restoration as u8) << 3), (w - 1) as u8, (h - 1) as u8]
+        }
+        _ => {
+            let mut out = vec![(VERSION << 6) | (MODE_EXPLICIT_SEQ << 4), seq.len() as u8];
+            out.extend_from_slice(seq);
+            out
+        }
+    };
     out.extend_from_slice(frame);
     Ok(out)
 }
