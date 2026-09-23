@@ -53,11 +53,12 @@ minus space, `"`, `&`, `'`, `<`, `>` and `\`, so the string drops into HTML
 attributes and JSON unescaped at 6.46 bits per character (base64 is 6,
 BlurHash's base83 is 6.38; the largest attribute-safe ASCII alphabet would only
 buy another 0.5%). Any AV1 encoder producing a reduced still-picture header and
-a single frame OBU can emit an avash (`avash::pack` takes a raw OBU stream), but
-only libaom's tool set matches the canonical headers. rav1e signals 64x64
-superblocks, no filter-intra and a separate UV delta q, so the wasm encoder
-falls back to mode 2 and its strings run about 11 characters longer. Decoding
-rebuilds the OBU stream or a minimal AVIF; browsers decode the AVIF natively.
+a single frame OBU can emit an avash (`avash::pack` takes a raw OBU stream).
+The bundled encoder is rav1e; it signals 64x64 superblocks, no filter-intra and
+a separate UV delta q, none of which the canonical headers express yet, so its
+strings currently take mode 2 and run about 11 characters longer than mode 0.
+Decoding rebuilds the OBU stream or a minimal AVIF; browsers decode the AVIF
+natively.
 
 ## Rust
 
@@ -68,7 +69,7 @@ let hash = avash::encode(&rgba, width, height, &avash::Options::default())?;
 // e.g. (48, 32); both always even
 let (w, h) = avash::dimensions(&hash)?;
 
-// RGBA8 at native size, via libaom
+// RGBA8 at native size, via dav1d
 let img = avash::decode(&hash)?;
 // standalone .avif bytes
 let avif = avash::to_avif(&hash)?;
@@ -77,9 +78,9 @@ let avif = avash::to_avif(&hash)?;
 let bytes = avash::pack(&raw_obu_stream)?;
 ```
 
-Features: `aom` (default, libaom encode + decode, built from source), `rav1e`
-(pure Rust encode, mode 2, ~9 bytes longer), `wasm` (rav1e + wasm-bindgen
-exports `encode` and `toAvif`), `cli`.
+Features: `dav1d` (default, pixel decode via system libdav1d), `wasm`
+(wasm-bindgen exports `encode` and `toAvif`), `cli` (implies `dav1d`). Encoding
+is always rav1e, pure Rust.
 
 ## CLI
 

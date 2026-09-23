@@ -32,11 +32,10 @@
 //! never stores. [`to_av1`] and [`to_avif`] rebuild a stream stock decoders
 //! accept.
 
-#[cfg(feature = "aom")]
-mod aom_backend;
 pub mod bits;
 mod color;
-#[cfg(feature = "rav1e")]
+#[cfg(feature = "dav1d")]
+mod dav1d_backend;
 mod rav1e_backend;
 
 use bits::FrameHeader;
@@ -67,6 +66,12 @@ impl fmt::Display for Error {
 
 impl std::error::Error for Error {}
 
+/// Wiener taps `[luma, chroma]`: the outer three of a symmetric 7-tap filter
+/// summing to 128. Baked into the bitstream, so any AV1 decoder applies them.
+pub const BLUR_LIGHT: [[i8; 3]; 2] = [[0, 0, 16], [0, 0, 16]];
+pub const BLUR_MEDIUM: [[i8; 3]; 2] = [[0, 8, 32], [0, 8, 32]];
+pub const BLUR_STRONG: [[i8; 3]; 2] = [[6, 8, 26], [0, 8, 32]];
+
 /// Encoder settings.
 #[derive(Debug, Clone, Copy)]
 pub struct Options {
@@ -74,11 +79,13 @@ pub struct Options {
     pub size: u32,
     /// Encoding quality, 0 (smallest) ..= 63 (best). Default 23.
     pub quality: u8,
+    /// Loop-restoration blur hiding block edges; `None` for no filter. Default [`BLUR_MEDIUM`].
+    pub blur: Option<[[i8; 3]; 2]>,
 }
 
 impl Default for Options {
     fn default() -> Self {
-        Self { size: 48, quality: 23 }
+        Self { size: 48, quality: 23, blur: Some(BLUR_MEDIUM) }
     }
 }
 
@@ -89,19 +96,8 @@ pub struct Image {
     pub rgba: Vec<u8>,
 }
 
-/// Encodes an RGBA8 image into an avash string using libaom.
-#[cfg(feature = "aom")]
+/// Encodes an RGBA8 image into an avash string.
 pub fn encode(rgba: &[u8], width: u32, height: u32, opts: &Options) -> Result<String, Error> {
-    encode_with(rgba, width, height, opts, aom_backend::encode)
-}
-
-/// Encodes an RGBA8 image into an avash string using rav1e (pure Rust; wasm-capable).
-#[cfg(feature = "rav1e")]
-pub fn encode_rav1e(rgba: &[u8], width: u32, height: u32, opts: &Options) -> Result<String, Error> {
-    encode_with(rgba, width, height, opts, rav1e_backend::encode)
-}
-
-fn encode_with(rgba: &[u8], width: u32, height: u32, opts: &Options, backend: fn(&color::Yuv420, u8) -> Result<Vec<u8>, Error>) -> Result<String, Error> {
     if width == 0 || height == 0 || rgba.len() != (width as usize) * (height as usize) * 4 {
         return Err(Error::InvalidInput("rgba length does not match dimensions"));
     }
@@ -117,14 +113,14 @@ fn encode_with(rgba: &[u8], width: u32, height: u32, opts: &Options, backend: fn
     let (dw, dh) = (even(dw), even(dh));
     let rgb = color::downsample(rgba, width, height, dw, dh);
     let yuv = color::rgb_to_yuv420(&rgb, dw, dh);
-    let obus = backend(&yuv, 63 - opts.quality)?;
+    let obus = rav1e_backend::encode(&yuv, 63 - opts.quality, opts.blur)?;
     Ok(to_base88(&pack(&obus)?))
 }
 
 /// Decodes an avash string to RGBA8 pixels at its native (tiny) size.
-#[cfg(feature = "aom")]
+#[cfg(feature = "dav1d")]
 pub fn decode(hash: &str) -> Result<Image, Error> {
-    let yuv = aom_backend::decode(&to_av1(hash)?)?;
+    let yuv = dav1d_backend::decode(&to_av1(hash)?)?;
     Ok(Image { width: yuv.width, height: yuv.height, rgba: color::yuv420_to_rgba(&yuv) })
 }
 
@@ -331,8 +327,9 @@ mod wasm {
     use wasm_bindgen::prelude::*;
 
     #[wasm_bindgen]
-    pub fn encode(rgba: &[u8], width: u32, height: u32, size: u32, quality: u8) -> Result<String, JsError> {
-        super::encode_rav1e(rgba, width, height, &super::Options { size, quality }).map_err(|e| JsError::new(&e.to_string()))
+    pub fn encode(rgba: &[u8], width: u32, height: u32, size: u32, quality: u8, blur: u8) -> Result<String, JsError> {
+        let blur = [None, Some(super::BLUR_LIGHT), Some(super::BLUR_MEDIUM), Some(super::BLUR_STRONG)].get(blur as usize).copied().ok_or_else(|| JsError::new("blur must be 0..=3"))?;
+        super::encode(rgba, width, height, &super::Options { size, quality, blur }).map_err(|e| JsError::new(&e.to_string()))
     }
 
     #[wasm_bindgen(js_name = toAvif)]

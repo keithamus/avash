@@ -12,23 +12,21 @@ exclude = ["demo", "exp", "index.html", "js", "package.json", "package-lock.json
 
 [package.metadata.docs.rs]
 no-default-features = true
-features = ["rav1e"]
 
 [lib]
 crate-type = ["rlib", "cdylib"]
 
 [dependencies]
-libaom-sys = { version = "0.17", optional = true }
-rav1e = { version = "0.8", default-features = false, optional = true }
+rav1e = { version = "0.8", default-features = false }
+dav1d = { version = "0.11", optional = true }
 wasm-bindgen = { version = "0.2", optional = true }
 image = { version = "0.25", default-features = false, features = ["png", "jpeg", "webp"], optional = true }
 
 [features]
-default = ["aom", "cli"]
-aom = ["dep:libaom-sys"]
-rav1e = ["dep:rav1e"]
-wasm = ["rav1e", "dep:wasm-bindgen"]
-cli = ["aom", "dep:image"]
+default = ["dav1d", "cli"]
+dav1d = ["dep:dav1d"]
+wasm = ["dep:wasm-bindgen"]
+cli = ["dav1d", "dep:image"]
 
 [[bin]]
 name = "avash"
@@ -38,3 +36,6 @@ required-features = ["cli"]
 opt-level = 3
 lto = true
 codegen-units = 1
+
+[patch.crates-io]
+rav1e = { path = "rav1e" }

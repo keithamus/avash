@@ -6,15 +6,16 @@
  * @param {number} height
  * @param {number} size
  * @param {number} quality
+ * @param {number} blur
  * @returns {string}
  */
-export function encode(rgba, width, height, size, quality) {
+export function encode(rgba, width, height, size, quality, blur) {
     let deferred3_0;
     let deferred3_1;
     try {
         const ptr0 = passArray8ToWasm0(rgba, wasm.__wbindgen_malloc);
         const len0 = WASM_VECTOR_LEN;
-        const ret = wasm.encode(ptr0, len0, width, height, size, quality);
+        const ret = wasm.encode(ptr0, len0, width, height, size, quality, blur);
         var ptr2 = ret[0];
         var len2 = ret[1];
         if (ret[3]) {

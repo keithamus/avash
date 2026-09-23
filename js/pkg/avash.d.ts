@@ -1,7 +1,7 @@
 /* tslint:disable */
 /* eslint-disable */
 
-export function encode(rgba: Uint8Array, width: number, height: number, size: number, quality: number): string;
+export function encode(rgba: Uint8Array, width: number, height: number, size: number, quality: number, blur: number): string;
 
 export function toAvif(hash: string): Uint8Array;
 
@@ -9,7 +9,7 @@ export type InitInput = RequestInfo | URL | Response | BufferSource | WebAssembl
 
 export interface InitOutput {
     readonly memory: WebAssembly.Memory;
-    readonly encode: (a: number, b: number, c: number, d: number, e: number, f: number) => [number, number, number, number];
+    readonly encode: (a: number, b: number, c: number, d: number, e: number, f: number, g: number) => [number, number, number, number];
     readonly toAvif: (a: number, b: number) => [number, number, number, number];
     readonly __wbindgen_externrefs: WebAssembly.Table;
     readonly __wbindgen_malloc: (a: number, b: number) => number;

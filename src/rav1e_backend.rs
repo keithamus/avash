@@ -4,7 +4,7 @@ use rav1e::config::SpeedSettings;
 use rav1e::prelude::*;
 
 /// Encodes one 8-bit 4:2:0 frame as a still picture, returning the raw OBU stream.
-pub fn encode(img: &Yuv420, cq_level: u8) -> Result<Vec<u8>, Error> {
+pub fn encode(img: &Yuv420, cq_level: u8, wiener: Option<[[i8; 3]; 2]>) -> Result<Vec<u8>, Error> {
     let mut speed = SpeedSettings::from_preset(0);
     speed.cdef = false;
     speed.lrf = false;
@@ -25,6 +25,7 @@ pub fn encode(img: &Yuv420, cq_level: u8) -> Result<Vec<u8>, Error> {
         max_key_frame_interval: 1,
         quantizer: (cq_level as usize * 255 + 31) / 63,
         speed_settings: speed,
+        wiener,
         ..Default::default()
     };
     let cfg = Config::new().with_encoder_config(enc).with_threads(1);

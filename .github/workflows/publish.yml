@@ -32,7 +32,7 @@ jobs:
       id-token: write
     steps:
       - uses: actions/checkout@v7
-      - run: sudo apt-get update && sudo apt-get install -y cmake nasm
+      - run: sudo apt-get update && sudo apt-get install -y libdav1d-dev
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
       - uses: rust-lang/crates-io-auth-action@v1

@@ -72,7 +72,7 @@ pub fn rgb_to_yuv420(rgb: &[f32], width: u32, height: u32) -> Yuv420 {
     Yuv420 { width, height, y, u, v }
 }
 
-#[cfg(feature = "aom")]
+#[cfg(feature = "dav1d")]
 pub fn yuv420_to_rgba(img: &Yuv420) -> Vec<u8> {
     let cw = img.chroma_width();
     let mut out = vec![255u8; (img.width * img.height * 4) as usize];

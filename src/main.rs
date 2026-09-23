@@ -1,7 +1,7 @@
 use std::process::exit;
 
 const USAGE: &str = "usage:
-  avash encode <image> [--size N] [--quality Q]   print avash for an image (png/jpeg/webp)
+  avash encode <image> [--size N] [--quality Q] [--blur none|light|medium|strong]
   avash decode <hash> -o <out.png> [--width W]    decode to PNG, optionally upscaled
   avash avif <hash> -o <out.avif>                 wrap as a standalone AVIF
   avash av1 <hash> -o <out.obu>                   raw AV1 OBU stream
@@ -33,6 +33,15 @@ fn run(args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
             }
             if let Some(q) = flag(args, "--quality") {
                 opts.quality = q.parse()?;
+            }
+            if let Some(b) = flag(args, "--blur") {
+                opts.blur = match b {
+                    "none" => None,
+                    "light" => Some(avash::BLUR_LIGHT),
+                    "medium" => Some(avash::BLUR_MEDIUM),
+                    "strong" => Some(avash::BLUR_STRONG),
+                    _ => return Err(USAGE.into()),
+                };
             }
             println!("{}", avash::encode(img.as_raw(), img.width(), img.height(), &opts)?);
         }
