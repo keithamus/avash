@@ -8,6 +8,7 @@ pub fn encode(img: &Yuv420, cq_level: u8, wiener: Option<[[i8; 3]; 2]>) -> Resul
     let mut speed = SpeedSettings::from_preset(0);
     speed.cdef = false;
     speed.lrf = false;
+    speed.segmentation = SegmentationLevel::Disabled;
     let enc = EncoderConfig {
         width: img.width as usize,
         height: img.height as usize,
@@ -20,6 +21,7 @@ pub fn encode(img: &Yuv420, cq_level: u8, wiener: Option<[[i8; 3]; 2]>) -> Resul
             matrix_coefficients: MatrixCoefficients::BT601,
         }),
         still_picture: true,
+        tune: Tune::Psnr,
         low_latency: true,
         min_key_frame_interval: 0,
         max_key_frame_interval: 1,

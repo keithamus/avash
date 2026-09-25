@@ -883,7 +883,7 @@ impl<T: Pixel> FrameInvariants<T> {
       num_tg: 1,
       large_scale_tile: false,
       disable_cdf_update: false,
-      allow_screen_content_tools: sequence.force_screen_content_tools,
+      allow_screen_content_tools: 0,
       force_integer_mv: 1,
       primary_ref_frame: PRIMARY_REF_NONE,
       refresh_frame_flags: ALL_REF_FRAMES_MASK,

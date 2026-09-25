@@ -31,6 +31,7 @@ fn packing_the_rebuilt_stream_reproduces_the_bytes() {
     let av1 = avash::to_av1(&hash).unwrap();
     let stored = avash::from_base88(&hash).unwrap();
     assert_eq!(stored[0] >> 6, avash::VERSION);
+    assert_eq!((stored[0] >> 4) & 3, 1, "rav1e output should pack with both headers regenerated");
     assert_eq!(stored, avash::pack(&av1).unwrap());
     assert_eq!(avash::to_av1(&avash::to_base88(&stored)).unwrap(), av1);
 }

@@ -97,6 +97,12 @@ impl BitWriter {
         self.nbits
     }
 
+    pub fn align(&mut self) {
+        while !self.nbits.is_multiple_of(8) {
+            self.put(1, 0);
+        }
+    }
+
     pub fn finish(self) -> Vec<u8> {
         self.out
     }
@@ -124,6 +130,10 @@ impl<'a> BitReader<'a> {
 
     pub fn pos(&self) -> usize {
         self.pos
+    }
+
+    pub fn align(&mut self) {
+        self.pos = (self.pos + 7) & !7;
     }
 }
 
@@ -179,4 +189,99 @@ pub fn canonical_sequence_header(width: u32, height: u32, restoration: bool) -> 
     w.put(1, 0); // film_grain_params_present
     w.put(1, 1); // trailing bit
     w.finish()
+}
+
+/// Fields of the frame header that vary between rav1e still pictures.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct FrameParams {
+    pub base_q_idx: u8,
+    /// DeltaQYDc, DeltaQUDc, DeltaQUAc, DeltaQVDc, DeltaQVAc.
+    pub delta_q: [i8; 5],
+    /// Deblocking levels: luma vertical, luma horizontal, U, V.
+    pub loop_filter: [u8; 4],
+}
+
+/// The uncompressed frame header rav1e emits for a still picture, byte aligned
+/// so the tile data follows directly: CDF updates on, no screen content tools,
+/// no render size, one uniform tile, `params`, no quantiser matrices,
+/// segmentation or delta q, sharpness 0, no filter deltas, Wiener restoration
+/// on every plane in one 256 pixel unit when `restoration`, tx mode select on,
+/// full transform set.
+pub fn canonical_frame_header(width: u32, height: u32, restoration: bool, params: &FrameParams) -> Vec<u8> {
+    let mut w = BitWriter::new();
+    w.put(1, 0); // disable_cdf_update
+    w.put(1, 0); // allow_screen_content_tools
+    w.put(1, 0); // render_and_frame_size_different
+    w.put(1, 1); // uniform_tile_spacing_flag
+    if width > 64 {
+        w.put(1, 0); // increment_tile_cols_log2
+    }
+    if height > 64 {
+        w.put(1, 0); // increment_tile_rows_log2
+    }
+    w.put(8, params.base_q_idx as u32);
+    let [ydc, udc, uac, vdc, vac] = params.delta_q;
+    let delta_q = |w: &mut BitWriter, d: i8| {
+        w.put(1, (d != 0) as u32); // delta_coded
+        if d != 0 {
+            w.put(7, (d as u8 & 0x7f) as u32);
+        }
+    };
+    delta_q(&mut w, ydc);
+    let diff_uv = udc != vdc || uac != vac;
+    w.put(1, diff_uv as u32); // diff_uv_delta
+    delta_q(&mut w, udc);
+    delta_q(&mut w, uac);
+    if diff_uv {
+        delta_q(&mut w, vdc);
+        delta_q(&mut w, vac);
+    }
+    w.put(1, 0); // using_qmatrix
+    w.put(1, 0); // segmentation_enabled
+    w.put(1, 0); // delta_q_present
+    let lf = params.loop_filter;
+    w.put(6, lf[0] as u32);
+    w.put(6, lf[1] as u32);
+    if lf[0] | lf[1] != 0 {
+        w.put(6, lf[2] as u32);
+        w.put(6, lf[3] as u32);
+    }
+    w.put(3, 0); // loop_filter_sharpness
+    w.put(1, 0); // loop_filter_delta_enabled
+    if restoration {
+        w.put(6, 0b101010); // lr_type: RESTORE_WIENER x3
+        w.put(1, 1); // lr_unit_shift
+        w.put(1, 1); // lr_unit_extra_shift
+        w.put(1, 0); // lr_uv_shift
+    }
+    w.put(1, 1); // tx_mode_select
+    w.put(1, 0); // reduced_tx_set
+    w.align();
+    w.finish()
+}
+
+/// Reads the variable fields out of an OBU_FRAME payload laid out like
+/// [`canonical_frame_header`], returning them with the tile data offset. The
+/// caller regenerates and compares; constant bits are not checked here.
+pub fn canonical_frame_params(frame: &[u8], width: u32, height: u32, restoration: bool) -> Result<(FrameParams, usize), Error> {
+    let mut r = BitReader::new(frame);
+    r.get(4 + (width > 64) as u32 + (height > 64) as u32)?;
+    let base_q_idx = r.get(8)? as u8;
+    if base_q_idx == 0 {
+        return Err(Error::Malformed("lossless frame"));
+    }
+    let delta_q = |r: &mut BitReader| -> Result<i8, Error> { Ok(if r.get(1)? == 1 { ((r.get(7)? as u8) << 1) as i8 >> 1 } else { 0 }) };
+    let ydc = delta_q(&mut r)?;
+    let diff_uv = r.get(1)? == 1;
+    let (udc, uac) = (delta_q(&mut r)?, delta_q(&mut r)?);
+    let (vdc, vac) = if diff_uv { (delta_q(&mut r)?, delta_q(&mut r)?) } else { (udc, uac) };
+    r.get(3)?;
+    let mut lf = [r.get(6)? as u8, r.get(6)? as u8, 0, 0];
+    if lf[0] | lf[1] != 0 {
+        lf[2] = r.get(6)? as u8;
+        lf[3] = r.get(6)? as u8;
+    }
+    r.get(4 + if restoration { 9 } else { 0 } + 2)?;
+    r.align();
+    Ok((FrameParams { base_q_idx, delta_q: [ydc, udc, uac, vdc, vac], loop_filter: lf }, r.pos() / 8))
 }

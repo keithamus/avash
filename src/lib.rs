@@ -6,24 +6,26 @@
 //! is safe inside HTML attributes and JSON strings. The bytes are a bitstream:
 //!
 //! ```text
-//! 2  version = 1
+//! 2  version = 2
 //! 2  mode
-//! mode 1, canonical sequence header regenerated, frame stored whole:
+//! mode 1, rav1e's sequence and frame headers regenerated:
 //!   1  loop restoration enabled
-//!   3  padding
 //!   8  width - 1
 //!   8  height - 1
-//!   .. OBU_FRAME payload verbatim
-//! mode 2, foreign encoder: sequence header stored too
+//!   8  base_q_idx
+//!   7  DeltaQYDc, 7 DeltaQUDc, 7 DeltaQUAc, 7 DeltaQVDc, 7 DeltaQVAc
+//!   6  loop_filter_level[0], 6 loop_filter_level[1]
+//!   6  loop_filter_level[2], 6 loop_filter_level[3], only if either above is nonzero
+//!   .. padding to a byte, then the tile data verbatim
+//! mode 2, foreign encoder: both headers stored
 //!   4  padding
 //!   8  sequence header length
 //!   .. OBU_SEQUENCE_HEADER payload, then the OBU_FRAME payload verbatim
 //! ```
 //!
-//! The regenerated header is [`bits::canonical_sequence_header`], the one rav1e
-//! emits; mode 1 saves its 8 to 10 bytes plus the length byte. The frame header
-//! is not regenerated: rav1e's chroma delta quantisers come from tables a decoder
-//! side would have to carry. [`to_av1`] and [`to_avif`] rebuild a stream stock
+//! The regenerated headers are [`bits::canonical_sequence_header`] and
+//! [`bits::canonical_frame_header`], the ones rav1e emits; mode 1 stores their
+//! 35 or so bytes in 10 or 11. [`to_av1`] and [`to_avif`] rebuild a stream stock
 //! decoders accept.
 
 pub mod bits;
@@ -34,10 +36,10 @@ mod rav1e_backend;
 
 use std::fmt;
 
-pub const VERSION: u8 = 1;
+pub const VERSION: u8 = 2;
 
-const MODE_CANONICAL_SEQ: u8 = 1;
-const MODE_EXPLICIT_SEQ: u8 = 2;
+const MODE_CANONICAL: u8 = 1;
+const MODE_EXPLICIT: u8 = 2;
 
 #[derive(Debug)]
 pub enum Error {
@@ -174,15 +176,42 @@ fn split(bytes: &[u8]) -> Result<Parts, Error> {
     if bytes.len() < 4 {
         return Err(Error::Malformed("too short"));
     }
-    if bytes[0] >> 6 != VERSION {
+    let version = bytes[0] >> 6;
+    if version == 0 || version > VERSION {
         return Err(Error::Malformed("unsupported version"));
     }
     let (seq, frame) = match (bytes[0] >> 4) & 3 {
-        MODE_CANONICAL_SEQ => {
+        // version 1 stored the frame whole after a byte-padded prefix
+        MODE_CANONICAL if version == 1 => {
             let restoration = (bytes[0] >> 3) & 1 == 1;
             (bits::canonical_sequence_header(bytes[1] as u32 + 1, bytes[2] as u32 + 1, restoration), bytes[3..].to_vec())
         }
-        MODE_EXPLICIT_SEQ => {
+        MODE_CANONICAL => {
+            let mut r = bits::BitReader::new(bytes);
+            r.get(4)?;
+            let restoration = r.get(1)? == 1;
+            let (w, h) = (r.get(8)? + 1, r.get(8)? + 1);
+            let base_q_idx = r.get(8)? as u8;
+            let mut delta_q = [0i8; 5];
+            for d in &mut delta_q {
+                *d = ((r.get(7)? as u8) << 1) as i8 >> 1;
+            }
+            let mut lf = [r.get(6)? as u8, r.get(6)? as u8, 0, 0];
+            if lf[0] | lf[1] != 0 {
+                lf[2] = r.get(6)? as u8;
+                lf[3] = r.get(6)? as u8;
+            }
+            r.align();
+            let params = bits::FrameParams { base_q_idx, delta_q, loop_filter: lf };
+            let mut frame = bits::canonical_frame_header(w, h, restoration, &params);
+            let tile = bytes.get(r.pos() / 8..).ok_or(Error::Malformed("truncated header"))?;
+            if tile.is_empty() {
+                return Err(Error::Malformed("missing tile data"));
+            }
+            frame.extend_from_slice(tile);
+            (bits::canonical_sequence_header(w, h, restoration), frame)
+        }
+        MODE_EXPLICIT => {
             let n = bytes[1] as usize;
             let seq = bytes.get(2..2 + n).ok_or(Error::Malformed("truncated sequence header"))?;
             (seq.to_vec(), bytes[2 + n..].to_vec())
@@ -213,19 +242,47 @@ pub fn pack(obus: &[u8]) -> Result<Vec<u8>, Error> {
         return Err(Error::Codec("sequence header too long".into()));
     }
     let (w, h) = bits::sequence_header_dimensions(seq)?;
-    let canonical = [false, true].into_iter().find(|&r| seq == bits::canonical_sequence_header(w, h, r));
-    let mut out = match canonical {
-        Some(restoration) if w <= 256 && h <= 256 => {
-            vec![(VERSION << 6) | (MODE_CANONICAL_SEQ << 4) | ((restoration as u8) << 3), (w - 1) as u8, (h - 1) as u8]
+    if let Some((restoration, params, tile)) = canonical(seq, frame, w, h) {
+        let mut out = bits::BitWriter::new();
+        out.put(2, VERSION as u32);
+        out.put(2, MODE_CANONICAL as u32);
+        out.put(1, restoration as u32);
+        out.put(8, w - 1);
+        out.put(8, h - 1);
+        out.put(8, params.base_q_idx as u32);
+        for d in params.delta_q {
+            out.put(7, (d as u8 & 0x7f) as u32);
         }
-        _ => {
-            let mut out = vec![(VERSION << 6) | (MODE_EXPLICIT_SEQ << 4), seq.len() as u8];
-            out.extend_from_slice(seq);
-            out
+        let lf = params.loop_filter;
+        out.put(6, lf[0] as u32);
+        out.put(6, lf[1] as u32);
+        if lf[0] | lf[1] != 0 {
+            out.put(6, lf[2] as u32);
+            out.put(6, lf[3] as u32);
         }
-    };
+        out.align();
+        let mut out = out.finish();
+        out.extend_from_slice(tile);
+        return Ok(out);
+    }
+    let mut out = vec![(VERSION << 6) | (MODE_EXPLICIT << 4), seq.len() as u8];
+    out.extend_from_slice(seq);
     out.extend_from_slice(frame);
     Ok(out)
+}
+
+/// Restoration flag, frame parameters and tile data when both headers are the
+/// canonical rav1e ones and so can be regenerated.
+fn canonical<'a>(seq: &[u8], frame: &'a [u8], w: u32, h: u32) -> Option<(bool, bits::FrameParams, &'a [u8])> {
+    if w > 256 || h > 256 {
+        return None;
+    }
+    let restoration = [false, true].into_iter().find(|&r| seq == bits::canonical_sequence_header(w, h, r))?;
+    let (params, tile_start) = bits::canonical_frame_params(frame, w, h, restoration).ok()?;
+    if tile_start >= frame.len() || frame[..tile_start] != bits::canonical_frame_header(w, h, restoration, &params) {
+        return None;
+    }
+    Some((restoration, params, &frame[tile_start..]))
 }
 
 /// Printable ASCII minus space, `"`, `&`, `'`, `<`, `>` and `\`: safe in HTML attributes and JSON strings.
